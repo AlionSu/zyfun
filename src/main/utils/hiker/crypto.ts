@@ -101,7 +101,7 @@ export const rsaX = (
     return rsa.encode({
       src: input,
       key,
-      type: pub ? 0 : 1,
+      type: pub ? 0 : 1, // 0:公钥加密(标准) 1:私钥加密(非标)
       pad: mode,
       inputEncode: inBase64 ? 'base64' : 'utf8',
       outputEncode: outBase64 ? 'base64' : 'utf8',
@@ -111,7 +111,7 @@ export const rsaX = (
     return rsa.decode({
       src: input,
       key,
-      type: pub ? 0 : 1,
+      type: pub ? 1 : 0, // 0:私钥解密(标准) 1:公钥解密(非标)
       pad: mode,
       inputEncode: inBase64 ? 'base64' : 'utf8',
       outputEncode: outBase64 ? 'base64' : 'utf8',

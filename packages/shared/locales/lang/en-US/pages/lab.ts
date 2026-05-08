@@ -66,6 +66,10 @@ export default {
           rabbitLegacy: 'RabbitLegacy',
           sm4: 'SM4',
         },
+        rsaModeMap: {
+          standard: 'Public Encrypt/Private Decrypt',
+          nonStandard: 'Private Encrypt/Public Decrypt',
+        },
       },
       message: {
         encodeNotUtf8: 'Encryption does not support utf8 as an output format',

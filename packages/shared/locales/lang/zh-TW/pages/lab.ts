@@ -66,6 +66,10 @@ export default {
           rabbitLegacy: 'RabbitLegacy',
           sm4: 'SM4',
         },
+        rsaModeMap: {
+          standard: '公加私解',
+          nonStandard: '私加公解',
+        },
       },
       message: {
         encodeNotUtf8: '加密不支持utf8作為輸出格式',

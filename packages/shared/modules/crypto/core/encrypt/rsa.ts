@@ -1,7 +1,7 @@
 import forge from 'node-forge';
 
 import type { RsaOptions } from '../../type';
-import { arrayToBytes as forgeArrayToBytes, stringify as forgeStringify } from '../../utils/forge';
+import { arrayToBytes as forgeArrayToBytes, parse as forgeParse, stringify as forgeStringify } from '../../utils/forge';
 import { parse as wordArrayParse, wordArrayToArray } from '../../utils/wordArray';
 
 const PUB_REGEX = /^-----BEGIN PUBLIC KEY-----[\s\S]+?-----END PUBLIC KEY-----[\s\S]*$/;
@@ -29,17 +29,17 @@ const getPad = (pad: string): forge.pki.rsa.EncryptionScheme => {
 
 const getKey = (
   key: string,
-  type: 0 | 1,
+  type: 'public' | 'private',
   passphrase: string,
   passphraseEncode: NonNullable<RsaOptions['passphraseEncode']>,
 ): forge.pki.rsa.PublicKey | forge.pki.rsa.PrivateKey => {
   let rsaKey: forge.pki.rsa.PublicKey | forge.pki.rsa.PrivateKey | undefined;
 
-  if (type === 0) {
+  if (type === 'public') {
     if (!PUB_REGEX.test(key)) throw new Error('Key is not a valid public key');
 
     rsaKey = forge.pki.publicKeyFromPem(key);
-  } else if (type === 1) {
+  } else if (type === 'private') {
     if (!PRI_REGEX.test(key)) throw new Error('Key is not a valid private key');
 
     if (key.includes('ENCRYPTED')) {
@@ -128,6 +128,7 @@ export const rsa = {
    * 超长文本: https://www.toolzl.com/tools/testrsa.html
    * 变态模式: https://the-x.cn/cryptography/Rsa.aspx
    * 变态模式: https://apiked.com/rsa
+   * 变态模式: https://hsmkit.com/rsa-encryption
    *
    * @param {RsaOptions} options - 加密参数
    * @returns {string} - 加密结果
@@ -172,7 +173,7 @@ export const rsa = {
     if (!['base64', 'hex'].includes(outputEncode.toLowerCase())) return '';
     if (!src || !key) return '';
 
-    const rsaKey = getKey(key, type, passphrase, passphraseEncode);
+    const rsaKey = getKey(key, type === 1 ? 'private' : 'public', passphrase, passphraseEncode);
     const scheme = getPad(pad);
     const schemeOptions = getSchemeOptions(pad);
 
@@ -180,12 +181,47 @@ export const rsa = {
     const plaintextBytes = forgeArrayToBytes(wordArrayToArray(plaintextBuffer) as unknown as ArrayBuffer).getBytes();
 
     const encryptFn = (data: string): string => {
+      const n = rsaKey.n;
+      const e = (rsaKey as forge.pki.rsa.PublicKey).e;
+      const d = (rsaKey as forge.pki.rsa.PrivateKey).d;
+
       if (type === 0) {
-        return (rsaKey as forge.pki.rsa.PublicKey).encrypt(data, scheme, schemeOptions);
+        // 公钥加密: C = M^e mod n
+        if (scheme === 'RSAES-PKCS1-V1_5' || scheme === 'RSA-OAEP') {
+          return (rsaKey as forge.pki.rsa.PublicKey).encrypt(data, scheme, schemeOptions);
+        } else if (scheme === 'NONE') {
+          const dataBI = new forge.jsbn.BigInteger(forgeStringify.hex(data), 16);
+          const encryptedBI = dataBI.modPow(e, n);
+          const hex = encryptedBI.toString(16).padStart(n.bitLength() / 4, '0');
+          return forgeParse.hex(hex);
+        }
+
+        throw new Error(`Public key encryption does not support ${pad} padding`);
       } else {
-        if (scheme !== 'RSAES-PKCS1-V1_5')
-          throw new Error('Private key encryption only supports RSAES-PKCS1-V1_5 padding');
-        throw new Error('Private key encryption is not supported');
+        // 私钥加密: C = M^d mod n
+        if (scheme === 'RSA-OAEP') {
+          throw new Error('Private key encryption does not support RSA-OAEP padding');
+        } else if (scheme === 'RSAES-PKCS1-V1_5' || scheme === 'NONE') {
+          let hexToEncrypt: string = '';
+          if (scheme === 'RSAES-PKCS1-V1_5') {
+            const keyBytes = rsaKey.n.bitLength() / 8;
+            const dataLen = data.length;
+            const padLen = keyBytes - dataLen - 3;
+            if (padLen < 8) throw new Error('Data too long for key size');
+
+            // 0x00 || 0x01 || PS (0xFF bytes) || 0x00 || Data
+            hexToEncrypt = `0001${'FF'.repeat(padLen)}00${forgeStringify.hex(data)}`;
+          } else if (scheme === 'NONE') {
+            hexToEncrypt = forgeStringify.hex(data);
+          }
+
+          const dataBI = new forge.jsbn.BigInteger(hexToEncrypt, 16);
+          const encryptedBI = dataBI.modPow(d, n);
+          const encryptedHex = encryptedBI.toString(16).padStart(n.bitLength() / 4, '0');
+          return forgeParse.hex(encryptedHex);
+        }
+
+        throw new Error(`Private key encryption does not support ${pad} padding`);
       }
     };
 
@@ -215,6 +251,7 @@ export const rsa = {
    * 超长文本: https://www.toolzl.com/tools/testrsa.html
    * 变态模式: https://the-x.cn/cryptography/Rsa.aspx
    * 变态模式: https://apiked.com/rsa
+   * 变态模式: https://hsmkit.com/rsa-encryption
    *
    * @param {RsaOptions} options - 解密参数
    * @returns {string} - 解密结果
@@ -268,7 +305,7 @@ export const rsa = {
       src,
       key,
       passphrase = '',
-      type = 1, // 0: 公钥解密（非标）, 1: 私钥解密
+      type = 0, // 0: 私钥解密, 1: 公钥解密（非标）
       long = false,
       pad = 'rsaes-pkcs1-v1_5',
       passphraseEncode = 'utf8',
@@ -279,7 +316,7 @@ export const rsa = {
     if (!['base64', 'hex'].includes(inputEncode.toLowerCase())) return '';
     if (!src || !key) return '';
 
-    const rsaKey = getKey(key, type, passphrase, passphraseEncode);
+    const rsaKey = getKey(key, type === 1 ? 'public' : 'private', passphrase, passphraseEncode);
     const schemeOptions = getSchemeOptions(pad);
     const scheme = getPad(pad);
 
@@ -287,12 +324,50 @@ export const rsa = {
     const cipherBytes = forgeArrayToBytes(wordArrayToArray(cipherBuffer) as unknown as ArrayBuffer).getBytes();
 
     const decryptFn = (data: string): string => {
+      const n = rsaKey.n;
+      const e = (rsaKey as forge.pki.rsa.PublicKey).e;
+      const d = (rsaKey as forge.pki.rsa.PrivateKey).d;
+
       if (type === 0) {
-        if (scheme !== 'RSAES-PKCS1-V1_5')
-          throw new Error('Public key decryption only supports RSAES-PKCS1-V1_5 padding');
-        throw new Error('Public key decryption is not supported');
+        // 私钥解密: M = C^d mod n
+        if (scheme === 'RSAES-PKCS1-V1_5' || scheme === 'RSA-OAEP') {
+          return (rsaKey as forge.pki.rsa.PrivateKey).decrypt(data, scheme, schemeOptions);
+        } else if (scheme === 'NONE') {
+          const dataBI = new forge.jsbn.BigInteger(forgeStringify.hex(data), 16);
+          const decryptedBI = dataBI.modPow(d, n);
+          const hex = decryptedBI.toString(16).padStart(n.bitLength() / 4, '0');
+          return forgeParse.hex(hex);
+        }
+
+        throw new Error(`Private key decryption does not support ${pad} padding`);
       } else {
-        return (rsaKey as forge.pki.rsa.PrivateKey).decrypt(data, scheme, schemeOptions);
+        // 公钥解密: M = C^e mod n
+        if (scheme === 'RSA-OAEP') {
+          throw new Error('Public key decryption does not support RSA-OAEP padding');
+        } else if (scheme === 'RSAES-PKCS1-V1_5' || scheme === 'NONE') {
+          const cipherBI = new forge.jsbn.BigInteger(forgeStringify.hex(data), 16);
+          const decryptedBI = cipherBI.modPow(e, n);
+
+          const k = Math.ceil(n.bitLength() / 8);
+          const decryptedHex = decryptedBI.toString(16).padStart(k * 2, '0');
+
+          if (scheme === 'RSAES-PKCS1-V1_5') {
+            // 填充格式: 00 || BT (01或02) || PS || 00 || Data
+            // 私钥加密通常使用 BT=01
+            const bt = decryptedHex.substring(2, 4);
+            if (decryptedHex.startsWith('00') && (bt === '01' || bt === '02')) {
+              const separatorPos = decryptedHex.indexOf('00', 4);
+              if (separatorPos !== -1 && separatorPos % 2 === 0) {
+                return forgeParse.hex(decryptedHex.substring(separatorPos + 2));
+              }
+            }
+            throw new Error('Invalid PKCS#1 v1.5 padding');
+          }
+
+          return forgeParse.hex(decryptedHex);
+        }
+
+        throw new Error('Public key decryption is not supported');
       }
     };
 
