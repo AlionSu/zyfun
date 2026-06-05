@@ -18,8 +18,9 @@
 - 修复: multi-player组件 已知问题(详见该组件CHANGELOG)
 - 修复: @zy/crypto打包配置参数错误
 - 变动: 数据库字段(注意备份)
-- 变动: share模块packages/shared -> src/shared
-- 变动: 后端接口部分路径和参数(及时调整)
+- 变动: shared模块 packages/shared -> src/shared
+- 变动: 日志模块名(注意查看日志变动)
+- 变动: 后端接口部分路径和参数(注意及时调整)
 - 变动: 依赖库升级
 
 [View on GitHub](https://github.com/Hiram-Wong/ZyPlayer/releases/tag/v3.4.7)
@@ -56,7 +57,7 @@
 - 修复: 开发环境下vue文件无法跳转(关闭ts-go配置项)
 - 修复: vscode部分插件加载解析数据错误(i18n-ally|vitest)
 - 变动: 插件/环境 请求通道 ipc(无超时) -> http(无超时)
-- 变动: 后端接口部分路径和参数(及时调整)
+- 变动: 后端接口部分路径和参数(注意及时调整)
 - 变动: 添加agent提示词(适用于部分开发工具)
 - 变动: 依赖库升级
 

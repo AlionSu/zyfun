@@ -4,7 +4,7 @@ import { LOG_MODULE } from '@shared/config/logger';
 import { urlResolve } from '@shared/modules/headers';
 import { fileTypeFromBuffer } from 'file-type';
 
-const logger = loggerService.withContext(LOG_MODULE.SYSTEM_HELPER);
+const logger = loggerService.withContext(`${LOG_MODULE.SYSTEM_HELPER}<m3u8>`);
 
 const M3U8_CONTENT_TYPES = [
   'application/vnd.apple.mpegurl',
