@@ -120,7 +120,7 @@
 import 'v3-infinite-loading/lib/style.css';
 
 import { isBetween, toYMD } from '@shared/modules/date';
-import { isArray, isArrayEmpty, isObject, isPositiveFiniteNumber } from '@shared/modules/validate';
+import { isArray, isArrayEmpty, isPositiveFiniteNumber } from '@shared/modules/validate';
 import type { ICmsInfo } from '@shared/types/cms';
 import type { IModels } from '@shared/types/db';
 import { DownloadIcon, HeartFilledIcon, HeartIcon, Share1Icon } from 'tdesign-icons-vue-next';
@@ -419,9 +419,7 @@ const callPlay = async (item: { url: string; headers?: Record<string, any> }) =>
   await emits('create', {
     url: item.url,
     isLive: true,
-    startTime: videoData.value.watchTime,
-    skipAd: playerConf.value.skipAd,
-    headers: isObject(item.headers) ? { ...item.headers } : {},
+    headers: item.headers,
   });
 };
 
